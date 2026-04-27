@@ -1,0 +1,9 @@
+.DS_Store
+**/.DS_Store
+**/__pycache__/
+PDFImageExtractorApp/build/
+PDFImageExtractorApp/test-output/
+PDFImageExtractorApp/test-output-bundled/
+PDFImageExtractorApp/test-pdffigures2/
+PDFImageExtractorApp/*.app/
+PDFImageExtractorApp/*.zip
