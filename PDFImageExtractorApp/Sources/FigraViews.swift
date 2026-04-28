@@ -902,7 +902,7 @@ struct DropTarget: View {
         .background(isTargeted ? Color.accentColor.opacity(0.12) : Color(nsColor: .textBackgroundColor))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])).foregroundStyle(isTargeted ? Color.accentColor : Color.secondary.opacity(0.35)))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
+        .onDrop(of: [.fileURL, .url, .pdf], isTargeted: $isTargeted) { providers in
             loadPDFURLs(from: providers, completion: onDropPDFs)
             return true
         }

@@ -185,26 +185,81 @@ func loadPDFURLs(from providers: [NSItemProvider], completion: @escaping ([URL])
     var urls: [URL] = []
     let lock = NSLock()
     let group = DispatchGroup()
+
+    func append(_ url: URL?) {
+        guard let url, url.isFileURL, url.pathExtension.lowercased() == "pdf" else { return }
+        lock.lock()
+        if !urls.contains(url) {
+            urls.append(url)
+        }
+        lock.unlock()
+    }
+
     for provider in providers {
-        group.enter()
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            defer { group.leave() }
-            let pdfURL: URL?
-            if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil), url.pathExtension.lowercased() == "pdf" {
-                pdfURL = url
-            } else if let url = item as? URL, url.pathExtension.lowercased() == "pdf" {
-                pdfURL = url
-            } else {
-                pdfURL = nil
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                append(urlFromDroppedItem(item))
             }
-            if let pdfURL {
-                lock.lock()
-                urls.append(pdfURL)
-                lock.unlock()
+        } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                append(urlFromDroppedItem(item))
+            }
+        } else if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
+            group.enter()
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.pdf.identifier) { url, _ in
+                defer { group.leave() }
+                guard let url else { return }
+                let temporaryURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("FigraDroppedPDFs", isDirectory: true)
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension("pdf")
+                do {
+                    try FileManager.default.createDirectory(at: temporaryURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    if FileManager.default.fileExists(atPath: temporaryURL.path) {
+                        try FileManager.default.removeItem(at: temporaryURL)
+                    }
+                    try FileManager.default.copyItem(at: url, to: temporaryURL)
+                    append(temporaryURL)
+                } catch {
+                    append(url)
+                }
             }
         }
     }
     group.notify(queue: .main) { completion(urls) }
+}
+
+private func urlFromDroppedItem(_ item: Any?) -> URL? {
+    if let url = item as? URL {
+        return url
+    }
+    if let url = item as? NSURL {
+        return url as URL
+    }
+    if let data = item as? Data {
+        if let url = URL(dataRepresentation: data, relativeTo: nil) {
+            return url
+        }
+        if let value = String(data: data, encoding: .utf8) {
+            return urlFromDroppedString(value)
+        }
+    }
+    if let value = item as? String {
+        return urlFromDroppedString(value)
+    }
+    return nil
+}
+
+private func urlFromDroppedString(_ value: String) -> URL? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.hasPrefix("/") {
+        return URL(fileURLWithPath: trimmed)
+    }
+    return URL(string: trimmed)
 }
 
 func copyImage(_ url: URL) {

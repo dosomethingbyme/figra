@@ -7,3 +7,4 @@
 - 输出图片使用 600 DPI PNG。
 - `PDFImageExtractorApp/Resources/jre/` 是随 app 打包的精简 Java runtime；正式 app 不依赖系统 Java、Python 或 conda。
 - 不要把论文 PDF、论文图片产物或 draw.io 复刻文件混入软件工程目录，除非它们被明确作为测试样例或资源使用。
+- 以后发布 release 不要手动创建或手动上传附件；只推送版本 tag，让 GitHub Actions 自动构建并发布唯一的 `Figra-vX.Y.Z.dmg` 和 `.sha256`。
