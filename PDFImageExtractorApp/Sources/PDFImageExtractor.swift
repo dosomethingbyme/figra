@@ -58,6 +58,21 @@ final class DropView: NSView {
     }
 }
 
+final class PanelView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private let statusLabel = NSTextField(labelWithString: "拖入 PDF，使用 pdffigures2 提取 Figure 和 Table")
@@ -99,75 +114,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func buildWindow() {
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 520))
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 620))
         content.wantsLayer = true
         content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
 
-        let dropView = DropView(frame: NSRect(x: 0, y: 150, width: 760, height: 370))
+        let dropView = DropView(frame: NSRect(x: 24, y: 232, width: 812, height: 356))
         dropView.onPDFsDropped = { [weak self] urls in
             self?.handlePDFs(urls)
         }
         content.addSubview(dropView)
 
-        let icon = NSTextField(labelWithString: "doc.richtext")
-        icon.font = NSFont.systemFont(ofSize: 44, weight: .regular)
-        icon.textColor = .tertiaryLabelColor
-        icon.alignment = .center
-        icon.frame = NSRect(x: 310, y: 378, width: 140, height: 52)
+        let icon = NSImageView(frame: NSRect(x: 398, y: 474, width: 64, height: 64))
+        icon.image = NSImage(systemSymbolName: "doc.richtext", accessibilityDescription: "PDF")
+        icon.contentTintColor = .tertiaryLabelColor
+        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 52, weight: .regular)
         content.addSubview(icon)
 
         let title = NSTextField(labelWithString: "PDF 图片提取器")
         title.font = NSFont.systemFont(ofSize: 30, weight: .semibold)
         title.alignment = .center
-        title.frame = NSRect(x: 120, y: 330, width: 520, height: 40)
+        title.frame = NSRect(x: 170, y: 426, width: 520, height: 40)
         content.addSubview(title)
 
         statusLabel.font = NSFont.systemFont(ofSize: 17, weight: .medium)
         statusLabel.textColor = .labelColor
         statusLabel.alignment = .center
-        statusLabel.frame = NSRect(x: 110, y: 292, width: 540, height: 26)
+        statusLabel.frame = NSRect(x: 150, y: 386, width: 560, height: 26)
         content.addSubview(statusLabel)
 
         detailLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.alignment = .center
-        detailLabel.frame = NSRect(x: 110, y: 264, width: 540, height: 22)
+        detailLabel.lineBreakMode = .byTruncatingMiddle
+        detailLabel.frame = NSRect(x: 118, y: 354, width: 624, height: 22)
         content.addSubview(detailLabel)
 
         let chooseButton = NSButton(title: "选择 PDF", target: self, action: #selector(choosePDF))
         chooseButton.bezelStyle = .rounded
         chooseButton.controlSize = .large
-        chooseButton.frame = NSRect(x: 296, y: 218, width: 168, height: 34)
+        chooseButton.frame = NSRect(x: 346, y: 306, width: 168, height: 36)
         content.addSubview(chooseButton)
 
         progress.style = .spinning
         progress.controlSize = .regular
         progress.isDisplayedWhenStopped = false
-        progress.frame = NSRect(x: 368, y: 176, width: 24, height: 24)
+        progress.frame = NSRect(x: 418, y: 270, width: 24, height: 24)
         content.addSubview(progress)
 
-        let logScroll = NSScrollView(frame: NSRect(x: 24, y: 24, width: 540, height: 108))
+        let logPanel = PanelView(frame: NSRect(x: 32, y: 24, width: 572, height: 176))
+        content.addSubview(logPanel)
+
+        let logTitle = NSTextField(labelWithString: "提取日志")
+        logTitle.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        logTitle.textColor = .labelColor
+        logTitle.frame = NSRect(x: 18, y: 142, width: 160, height: 22)
+        logPanel.addSubview(logTitle)
+
+        let logScroll = NSScrollView(frame: NSRect(x: 16, y: 16, width: 540, height: 120))
         logScroll.borderType = .noBorder
         logScroll.hasVerticalScroller = true
-        logScroll.drawsBackground = false
+        logScroll.drawsBackground = true
+        logScroll.backgroundColor = .textBackgroundColor
         logView.isEditable = false
+        logView.isSelectable = true
         logView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        logView.textColor = .secondaryLabelColor
-        logView.backgroundColor = .clear
+        logView.textColor = .labelColor
+        logView.backgroundColor = .textBackgroundColor
+        logView.textContainerInset = NSSize(width: 10, height: 8)
+        logView.isVerticallyResizable = true
+        logView.isHorizontallyResizable = false
+        logView.minSize = NSSize(width: 0, height: 120)
+        logView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        logView.frame = NSRect(x: 0, y: 0, width: 540, height: 120)
+        logView.autoresizingMask = [.width]
+        logView.textContainer?.containerSize = NSSize(width: 520, height: CGFloat.greatestFiniteMagnitude)
+        logView.textContainer?.widthTracksTextView = true
+        logView.string = "等待提取日志..."
         logScroll.documentView = logView
-        content.addSubview(logScroll)
+        logPanel.addSubview(logScroll)
+
+        let actionPanel = PanelView(frame: NSRect(x: 628, y: 24, width: 200, height: 176))
+        content.addSubview(actionPanel)
+
+        let actionTitle = NSTextField(labelWithString: "结果操作")
+        actionTitle.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        actionTitle.textColor = .labelColor
+        actionTitle.frame = NSRect(x: 18, y: 142, width: 120, height: 22)
+        actionPanel.addSubview(actionTitle)
+
+        let actionHint = NSTextField(wrappingLabelWithString: "提取完成后，可直接打开输出文件夹。")
+        actionHint.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        actionHint.textColor = .secondaryLabelColor
+        actionHint.frame = NSRect(x: 18, y: 88, width: 164, height: 40)
+        actionPanel.addSubview(actionHint)
 
         openButton.target = self
         openButton.action = #selector(openResultFolder)
         openButton.bezelStyle = .rounded
         openButton.controlSize = .large
         openButton.isEnabled = false
-        openButton.frame = NSRect(x: 604, y: 62, width: 132, height: 34)
-        content.addSubview(openButton)
+        openButton.frame = NSRect(x: 18, y: 28, width: 164, height: 36)
+        actionPanel.addSubview(openButton)
 
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -175,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "PDF 图片提取器"
         window.isReleasedWhenClosed = false
         window.contentView = content
-        window.minSize = NSSize(width: 680, height: 470)
+        window.minSize = NSSize(width: 760, height: 560)
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -199,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         progress.startAnimation(nil)
         statusLabel.stringValue = "正在提取..."
         detailLabel.stringValue = urls.map(\.lastPathComponent).joined(separator: ", ")
-        logView.string = ""
+        logView.string = "启动 pdffigures2...\n待处理文件：\(urls.map(\.lastPathComponent).joined(separator: ", "))\n"
 
         DispatchQueue.global(qos: .userInitiated).async {
             let result = self.runExtractor(urls)
@@ -275,14 +326,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: data, encoding: .utf8) ?? ""
-            logs.append("== \(pdfURL.lastPathComponent) ==\n\(output)")
 
             if process.terminationStatus != 0 {
+                logs.append("== \(pdfURL.lastPathComponent) ==\n\(output.isEmpty ? "pdffigures2 未返回错误详情。" : output)")
                 return (false, logs.joined(separator: "\n"), "", nil)
             }
 
             let count = countPNGFiles(in: figuresURL)
             summaries.append("\(pdfURL.lastPathComponent)：Figure/Table \(count)")
+            let visibleOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let section = """
+            == \(pdfURL.lastPathComponent) ==
+            输出目录：\(outputURL.path)
+            提取图片：\(count) 个
+            \(visibleOutput.isEmpty ? "pdffigures2 未返回详细日志。" : visibleOutput)
+            """
+            logs.append(section)
             lastOutputURL = outputURL
         }
 
