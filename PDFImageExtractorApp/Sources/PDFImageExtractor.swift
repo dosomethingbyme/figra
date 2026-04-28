@@ -72,6 +72,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildWindow()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if flag {
+            return true
+        }
+
+        showMainWindow()
+        return true
+    }
+
+    private func showMainWindow() {
+        if window == nil {
+            buildWindow()
+            return
+        }
+
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func buildWindow() {
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 520))
         content.wantsLayer = true
@@ -147,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         window.center()
         window.title = "PDF 图片提取器"
+        window.isReleasedWhenClosed = false
         window.contentView = content
         window.minSize = NSSize(width: 680, height: 470)
         window.makeKeyAndOrderFront(nil)
