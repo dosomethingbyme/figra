@@ -2,6 +2,8 @@
 
 Figra 是一个本地优先的 macOS PDF 工具箱，面向论文阅读、图表复用、报告整理和日常 PDF 处理。应用不上传文件，默认生成新文件，不覆盖原 PDF。
 
+![Figra 软件界面](docs/images/figra-ui.png)
+
 ## 当前能力
 
 - 图表提取：第一个主功能。使用内置 `pdffigures2.jar` 从单个论文 PDF 提取 Figure/Table，输出 PNG，DPI 支持 `150 / 300 / 600 / 900`，默认 600。
@@ -18,7 +20,7 @@ Figra 是一个本地优先的 macOS PDF 工具箱，面向论文阅读、图表
 ## 工程结构
 
 ```text
-PDFImageExtractorApp/
+FigraApp/
   Info.plist
   build_app.sh
   build_dmg.sh
@@ -45,29 +47,29 @@ logo.png
 命名约定：
 
 - App 名称、bundle 名称和可执行文件统一为 `Figra`。
-- `PDFImageExtractorApp/` 目录名暂时保留，避免影响现有路径和脚本；内部源码和可执行文件已不再使用 `PDFImageExtractor` 命名。
+- macOS app 工程目录统一为 `FigraApp/`。
 - 根目录 `logo.png` 是唯一 logo 源。构建时会从它生成 `Resources/logo.png`、`AppIcon.iconset`、`AppIcon.icns` 和 `AppIcon.ico`。
 - 生成的 app logo 和图标会统一做 macOS 风格圆角裁切。
 
 ## 构建
 
 ```bash
-cd PDFImageExtractorApp
+cd FigraApp
 ./build_app.sh
 ```
 
 构建 DMG：
 
 ```bash
-cd PDFImageExtractorApp
+cd FigraApp
 ./build_dmg.sh
 ```
 
 产物：
 
 ```text
-PDFImageExtractorApp/Figra.app
-PDFImageExtractorApp/Figra.dmg
+FigraApp/Figra.app
+FigraApp/Figra.dmg
 ```
 
 ## 运行时依赖
@@ -81,7 +83,7 @@ PDFImageExtractorApp/Figra.dmg
 如需单独刷新图标：
 
 ```bash
-cd PDFImageExtractorApp/Resources
+cd FigraApp/Resources
 swift generate_app_icon.swift
 iconutil -c icns AppIcon.iconset -o AppIcon.icns
 ```

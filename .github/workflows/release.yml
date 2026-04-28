@@ -54,13 +54,13 @@ jobs:
           fi
 
       - name: Build DMG
-        working-directory: PDFImageExtractorApp
+        working-directory: FigraApp
         run: ./build_dmg.sh
 
       - name: Prepare release asset
         run: |
           set -euo pipefail
-          cp "PDFImageExtractorApp/Figra.dmg" "${{ steps.release.outputs.asset_name }}"
+          cp "FigraApp/Figra.dmg" "${{ steps.release.outputs.asset_name }}"
           shasum -a 256 "${{ steps.release.outputs.asset_name }}" > "${{ steps.release.outputs.asset_name }}.sha256"
 
       - name: Upload build artifact
