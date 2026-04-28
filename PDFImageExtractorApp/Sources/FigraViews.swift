@@ -228,9 +228,11 @@ struct PageThumbnailPanel: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
                             .buttonStyle(.plain)
-                            .simultaneousGesture(TapGesture(count: 2).onEnded {
-                                onCopy(page.index)
-                            })
+                            .contextMenu {
+                                Button("复制页面图片") {
+                                    onCopy(page.index)
+                                }
+                            }
                         }
                     }
                     .padding(2)

@@ -134,8 +134,18 @@ func render(page: PDFPage, dpi: Int) -> NSImage {
 func copyPageToPasteboard(document: PDFDocument, pageIndex: Int, dpi: Int) -> Bool {
     guard let page = document.page(at: pageIndex) else { return false }
     let image = render(page: page, dpi: dpi)
-    NSPasteboard.general.clearContents()
-    return NSPasteboard.general.writeObjects([image])
+    guard let tiffData = image.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiffData),
+          let pngData = bitmap.representation(using: .png, properties: [:]) else {
+        return false
+    }
+
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.declareTypes([.png, .tiff], owner: nil)
+    let wrotePNG = pasteboard.setData(pngData, forType: .png)
+    let wroteTIFF = pasteboard.setData(tiffData, forType: .tiff)
+    return wrotePNG || wroteTIFF
 }
 
 func choosePDF() -> URL? {
