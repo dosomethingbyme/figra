@@ -72,6 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildWindow()
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if flag {
             return true
@@ -142,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         progress.frame = NSRect(x: 368, y: 176, width: 24, height: 24)
         content.addSubview(progress)
 
-        let logScroll = NSScrollView(frame: NSRect(x: 24, y: 24, width: 560, height: 108))
+        let logScroll = NSScrollView(frame: NSRect(x: 24, y: 24, width: 540, height: 108))
         logScroll.borderType = .noBorder
         logScroll.hasVerticalScroller = true
         logScroll.drawsBackground = false
