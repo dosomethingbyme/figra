@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="PDF 图片提取器.app"
-DMG_NAME="PDF图片提取器.dmg"
+APP_NAME="Figra.app"
+DMG_NAME="Figra.dmg"
 SIGNING_STAGING="/tmp/pdf2figure-dmg-staging"
 
 "$ROOT_DIR/build_app.sh" >/dev/null
@@ -21,7 +21,7 @@ codesign --verify --deep --strict "$SIGNING_STAGING/$APP_NAME"
 
 rm -f "$ROOT_DIR/$DMG_NAME"
 hdiutil create \
-  -volname "PDF 图片提取器" \
+  -volname "Figra" \
   -srcfolder "$SIGNING_STAGING" \
   -ov \
   -format UDZO \

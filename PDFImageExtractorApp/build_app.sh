@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="PDF 图片提取器.app"
+APP_NAME="Figra.app"
 BUILD_DIR="$ROOT_DIR/build"
 APP_DIR="$ROOT_DIR/$APP_NAME"
 CONTENTS="$APP_DIR/Contents"

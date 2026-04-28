@@ -74,9 +74,11 @@ final class PanelView: NSView {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let appName = "Figra"
+    private let extractionDPI = "600"
     private var window: NSWindow!
-    private let statusLabel = NSTextField(labelWithString: "拖入 PDF，使用 pdffigures2 提取 Figure 和 Table")
-    private let detailLabel = NSTextField(labelWithString: "结果会保存到 PDF 同级目录，按文件名创建 *_pdffigures2 文件夹。")
+    private let statusLabel = NSTextField(labelWithString: "拖入 PDF")
+    private let detailLabel = NSTextField(labelWithString: "自动识别论文中的配图与表格")
     private let logView = NSTextView()
     private let progress = NSProgressIndicator()
     private let openButton = NSButton(title: "打开结果文件夹", target: nil, action: nil)
@@ -124,41 +126,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         content.addSubview(dropView)
 
-        let icon = NSImageView(frame: NSRect(x: 398, y: 474, width: 64, height: 64))
-        icon.image = NSImage(systemSymbolName: "doc.richtext", accessibilityDescription: "PDF")
-        icon.contentTintColor = .tertiaryLabelColor
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 52, weight: .regular)
+        let icon = NSImageView(frame: NSRect(x: 402, y: 488, width: 56, height: 56))
+        icon.image = NSApp.applicationIconImage
+        icon.imageScaling = .scaleProportionallyUpOrDown
         content.addSubview(icon)
 
-        let title = NSTextField(labelWithString: "PDF 图片提取器")
-        title.font = NSFont.systemFont(ofSize: 30, weight: .semibold)
+        let title = NSTextField(labelWithString: appName)
+        title.font = NSFont.systemFont(ofSize: 32, weight: .semibold)
         title.alignment = .center
-        title.frame = NSRect(x: 170, y: 426, width: 520, height: 40)
+        title.frame = NSRect(x: 170, y: 438, width: 520, height: 42)
         content.addSubview(title)
 
         statusLabel.font = NSFont.systemFont(ofSize: 17, weight: .medium)
         statusLabel.textColor = .labelColor
         statusLabel.alignment = .center
-        statusLabel.frame = NSRect(x: 150, y: 386, width: 560, height: 26)
+        statusLabel.frame = NSRect(x: 150, y: 396, width: 560, height: 26)
         content.addSubview(statusLabel)
 
         detailLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.alignment = .center
         detailLabel.lineBreakMode = .byTruncatingMiddle
-        detailLabel.frame = NSRect(x: 118, y: 354, width: 624, height: 22)
+        detailLabel.frame = NSRect(x: 118, y: 366, width: 624, height: 22)
         content.addSubview(detailLabel)
 
         let chooseButton = NSButton(title: "选择 PDF", target: self, action: #selector(choosePDF))
         chooseButton.bezelStyle = .rounded
         chooseButton.controlSize = .large
-        chooseButton.frame = NSRect(x: 346, y: 306, width: 168, height: 36)
+        chooseButton.frame = NSRect(x: 346, y: 318, width: 168, height: 36)
         content.addSubview(chooseButton)
 
         progress.style = .spinning
         progress.controlSize = .regular
         progress.isDisplayedWhenStopped = false
-        progress.frame = NSRect(x: 418, y: 270, width: 24, height: 24)
+        progress.frame = NSRect(x: 418, y: 282, width: 24, height: 24)
         content.addSubview(progress)
 
         let logPanel = PanelView(frame: NSRect(x: 32, y: 24, width: 572, height: 176))
@@ -223,7 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.center()
-        window.title = "PDF 图片提取器"
+        window.title = appName
         window.isReleasedWhenClosed = false
         window.contentView = content
         window.minSize = NSSize(width: 760, height: 560)
@@ -250,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         progress.startAnimation(nil)
         statusLabel.stringValue = "正在提取..."
         detailLabel.stringValue = urls.map(\.lastPathComponent).joined(separator: ", ")
-        logView.string = "启动 pdffigures2...\n待处理文件：\(urls.map(\.lastPathComponent).joined(separator: ", "))\n"
+        logView.string = "开始处理...\n文件：\(urls.map(\.lastPathComponent).joined(separator: ", "))\n模式：高分辨率 PNG（\(extractionDPI) DPI）\n"
 
         DispatchQueue.global(qos: .userInitiated).async {
             let result = self.runExtractor(urls)
@@ -265,7 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.openButton.isEnabled = result.outputURL != nil
                 } else {
                     self.statusLabel.stringValue = "提取失败"
-                    self.detailLabel.stringValue = "请确认本机 Java 可用，并且 app 内置 pdffigures2.jar。"
+                    self.detailLabel.stringValue = "请查看下方日志。"
                     self.openButton.isEnabled = false
                 }
             }
@@ -308,7 +309,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "-jar", jarURL.path,
                 "-q",
                 "-e",
-                "-i", "150",
+                "-i", extractionDPI,
+                "-f", "png",
                 "-m", figuresURL.path + "/",
                 "-d", dataURL.path + "/",
                 pdfURL.path
@@ -338,7 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let section = """
             == \(pdfURL.lastPathComponent) ==
             输出目录：\(outputURL.path)
-            提取图片：\(count) 个
+            输出格式：PNG，无损压缩，\(extractionDPI) DPI
+            提取数量：\(count) 个
             \(visibleOutput.isEmpty ? "pdffigures2 未返回详细日志。" : visibleOutput)
             """
             logs.append(section)

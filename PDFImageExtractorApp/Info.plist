@@ -7,11 +7,11 @@
   <key>CFBundleExecutable</key>
   <string>PDFImageExtractor</string>
   <key>CFBundleIdentifier</key>
-  <string>local.codex.PDFImageExtractor</string>
+  <string>local.codex.Figra</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>PDF 图片提取器</string>
+  <string>Figra</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
   <key>CFBundlePackageType</key>
