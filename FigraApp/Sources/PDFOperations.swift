@@ -81,6 +81,77 @@ func writePDF(document: PDFDocument, pageIndexes: [Int], to url: URL) throws {
     guard output.write(to: url) else { throw AppError("写入 PDF 失败。") }
 }
 
+func writeSanitizedPDFCopy(document: PDFDocument, to url: URL) throws {
+    let output = PDFDocument()
+    for pageIndex in 0..<document.pageCount {
+        guard let page = document.page(at: pageIndex) else { continue }
+        let copiedPage = (page.copy() as? PDFPage) ?? page
+        output.insert(copiedPage, at: output.pageCount)
+    }
+    output.documentAttributes = [:]
+
+    let temporaryURL = url
+        .deletingLastPathComponent()
+        .appendingPathComponent(".\(UUID().uuidString)-\(url.lastPathComponent)", isDirectory: false)
+    defer { try? FileManager.default.removeItem(at: temporaryURL) }
+
+    guard output.write(to: temporaryURL) else { throw AppError("写入 PDF 失败。") }
+    try stripPDFDocumentInfoTrailer(from: temporaryURL)
+    if FileManager.default.fileExists(atPath: url.path) {
+        try FileManager.default.removeItem(at: url)
+    }
+    try FileManager.default.moveItem(at: temporaryURL, to: url)
+}
+
+private func stripPDFDocumentInfoTrailer(from url: URL) throws {
+    let data = try Data(contentsOf: url)
+    guard let text = String(data: data, encoding: .isoLatin1) else {
+        throw AppError("无法解析 PDF trailer。")
+    }
+    guard
+        let startXrefRange = text.range(of: "startxref", options: .backwards),
+        let trailerRange = text.range(of: "trailer", options: .backwards, range: text.startIndex..<startXrefRange.lowerBound),
+        let dictionaryStart = text.range(of: "<<", range: trailerRange.upperBound..<startXrefRange.lowerBound),
+        let dictionaryEnd = text.range(of: ">>", range: dictionaryStart.upperBound..<startXrefRange.lowerBound)
+    else {
+        throw AppError("无法定位 PDF trailer。")
+    }
+
+    let trailer = String(text[dictionaryStart.lowerBound..<dictionaryEnd.upperBound])
+    guard
+        let previousXref = firstMatch(in: String(text[startXrefRange.upperBound...]), pattern: #"^\s*(\d+)"#),
+        let size = firstMatch(in: trailer, pattern: #"/Size\s+(\d+)"#),
+        let root = firstMatch(in: trailer, pattern: #"/Root\s+(\d+\s+\d+\s+R)"#)
+    else {
+        throw AppError("无法读取 PDF trailer。")
+    }
+
+    let id = firstMatch(in: trailer, pattern: #"/ID\s*\[\s*<[^>]*>\s*<[^>]*>\s*\]"#)
+    let xrefOffset = data.count + 1
+    var replacement = "\nxref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size \(size) /Root \(root)"
+    if let id {
+        replacement += " \(id)"
+    }
+    replacement += " /Prev \(previousXref) >>\nstartxref\n\(xrefOffset)\n%%EOF\n"
+
+    guard let replacementData = replacement.data(using: .isoLatin1) else {
+        throw AppError("无法生成 PDF trailer。")
+    }
+    let handle = try FileHandle(forWritingTo: url)
+    defer { try? handle.close() }
+    try handle.seekToEnd()
+    try handle.write(contentsOf: replacementData)
+}
+
+private func firstMatch(in text: String, pattern: String) -> String? {
+    guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let match = expression.firstMatch(in: text, range: range) else { return nil }
+    let captureIndex = match.numberOfRanges > 1 ? 1 : 0
+    guard let captureRange = Range(match.range(at: captureIndex), in: text) else { return nil }
+    return String(text[captureRange])
+}
+
 func writeIndividualPDFs(document: PDFDocument, pageIndexes: [Int], sourceURL: URL, directory: URL) throws {
     let stem = safeName(sourceURL.deletingPathExtension().lastPathComponent)
     for pageIndex in pageIndexes {

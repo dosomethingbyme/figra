@@ -525,14 +525,14 @@ final class AppModel: ObservableObject {
             return
         }
         guard let outputURL = chooseSavePDF(defaultName: "\(safeName(pdfURL.deletingPathExtension().lastPathComponent))_private.pdf", defaultDirectory: defaultOutputDirectory) else { return }
-        document.documentAttributes = [:]
-        if document.write(to: outputURL) {
+        do {
+            try writeSanitizedPDFCopy(document: document, to: outputURL)
             privacyOutputURL = outputURL
             privacyStatus = "已导出清理副本：\(outputURL.path)"
             addRecentTask(tool: "清除隐私", title: pdfURL.lastPathComponent, detail: "清理 document info metadata", outputURL: outputURL)
             revealIfNeeded(outputURL)
-        } else {
-            privacyStatus = "写入 PDF 失败。"
+        } catch {
+            privacyStatus = "写入 PDF 失败：\(error.localizedDescription)"
         }
     }
 
@@ -575,13 +575,14 @@ final class AppModel: ObservableObject {
             }
         }
         guard let outputURL = chooseSavePDF(defaultName: "\(safeName(sourceURL.deletingPathExtension().lastPathComponent))_unlocked.pdf", defaultDirectory: defaultOutputDirectory) else { return }
-        if document.write(to: outputURL) {
+        do {
+            try writeSanitizedPDFCopy(document: document, to: outputURL)
             securityOutputURL = outputURL
             securityStatus = "已导出无密码副本：\(outputURL.path)"
             addRecentTask(tool: "PDF 加密", title: sourceURL.lastPathComponent, detail: "已导出无密码副本", outputURL: outputURL)
             revealIfNeeded(outputURL)
-        } else {
-            securityStatus = "导出无密码副本失败。"
+        } catch {
+            securityStatus = "导出无密码副本失败：\(error.localizedDescription)"
         }
     }
 
