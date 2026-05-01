@@ -81,13 +81,18 @@ jobs:
         run: |
           set -euo pipefail
           notes_file="$(mktemp)"
-          {
-            echo "Automated Figra release for ${TAG_NAME}."
-            echo
-            echo "Assets:"
-            echo "- ${ASSET_NAME}"
-            echo "- ${ASSET_NAME}.sha256"
-          } > "$notes_file"
+          release_notes=".github/release-notes/${TAG_NAME}.md"
+          if [[ -f "$release_notes" ]]; then
+            cp "$release_notes" "$notes_file"
+          else
+            {
+              echo "Automated Figra release for ${TAG_NAME}."
+              echo
+              echo "Assets:"
+              echo "- ${ASSET_NAME}"
+              echo "- ${ASSET_NAME}.sha256"
+            } > "$notes_file"
+          fi
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" "$ASSET_NAME" "$ASSET_NAME.sha256" --clobber

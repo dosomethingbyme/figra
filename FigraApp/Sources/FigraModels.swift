@@ -6,6 +6,7 @@ enum Tool: String, CaseIterable, Identifiable, Hashable {
     case pageExport = "页面提取"
     case pageOrganize = "页面整理"
     case merge = "合并 PDF"
+    case bibMerge = "合并 BibTeX"
     case split = "拆分 PDF"
     case compress = "压缩 PDF"
     case privacy = "清除隐私"
@@ -21,6 +22,7 @@ enum Tool: String, CaseIterable, Identifiable, Hashable {
         case .pageExport: return "doc.viewfinder"
         case .pageOrganize: return "square.grid.3x3"
         case .merge: return "rectangle.stack.badge.plus"
+        case .bibMerge: return "text.badge.plus"
         case .split: return "square.split.2x1"
         case .compress: return "arrow.down.right.and.arrow.up.left"
         case .privacy: return "hand.raised"
@@ -36,6 +38,7 @@ enum Tool: String, CaseIterable, Identifiable, Hashable {
         case .pageExport: return "选择 PDF 页面，导出图片或 PDF"
         case .pageOrganize: return "重排、删除页面后导出副本"
         case .merge: return "排序并合并多个 PDF"
+        case .bibMerge: return "合并多个 .bib 文件"
         case .split: return "按页面规则拆分 PDF"
         case .compress: return "生成体积优化副本"
         case .privacy: return "清理文档元数据"
@@ -76,6 +79,36 @@ struct MergeItem: Identifiable, Equatable {
     let url: URL
     let pageCount: Int
     let fileSize: Int
+}
+
+struct BibItem: Identifiable, Equatable {
+    let id = UUID()
+    let url: URL
+    let fileSize: Int
+    let referenceCount: Int
+}
+
+enum BibDuplicatePolicy: String, CaseIterable, Identifiable {
+    case keepAll = "保留全部"
+    case keyAndTitle = "清理重复项"
+
+    var id: String { rawValue }
+}
+
+struct BibMergeSummary {
+    let inputReferenceCount: Int
+    let outputReferenceCount: Int
+    let duplicateReferenceCount: Int
+    let duplicateKeyMatchCount: Int
+    let duplicateTitleMatchCount: Int
+
+    static let empty = BibMergeSummary(
+        inputReferenceCount: 0,
+        outputReferenceCount: 0,
+        duplicateReferenceCount: 0,
+        duplicateKeyMatchCount: 0,
+        duplicateTitleMatchCount: 0
+    )
 }
 
 enum FigureKind: String, CaseIterable, Identifiable {

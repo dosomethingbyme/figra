@@ -1,6 +1,7 @@
 import AppKit
 import PDFKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct Header<Trailing: View>: View {
     let title: String
@@ -23,11 +24,37 @@ struct DropTarget: View {
     let title: String
     let subtitle: String
     let onDropPDFs: ([URL]) -> Void
+
+    var body: some View {
+        FileDropTarget(
+            title: title,
+            subtitle: subtitle,
+            symbol: "arrow.down.doc",
+            acceptedTypes: [.fileURL, .url, .pdf],
+            allowedExtensions: ["pdf"],
+            fileRepresentationType: .pdf,
+            temporaryDirectoryName: "FigraDroppedPDFs",
+            temporaryExtension: "pdf",
+            onDropFiles: onDropPDFs
+        )
+    }
+}
+
+struct FileDropTarget: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let acceptedTypes: [UTType]
+    let allowedExtensions: Set<String>
+    let fileRepresentationType: UTType?
+    let temporaryDirectoryName: String
+    let temporaryExtension: String
+    let onDropFiles: ([URL]) -> Void
     @State private var isTargeted = false
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: "arrow.down.doc")
+            Image(systemName: symbol)
                 .font(.title2)
                 .foregroundStyle(.secondary)
             Text(title).font(.headline)
@@ -37,8 +64,15 @@ struct DropTarget: View {
         .background(isTargeted ? Color.accentColor.opacity(0.12) : Color(nsColor: .textBackgroundColor))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])).foregroundStyle(isTargeted ? Color.accentColor : Color.secondary.opacity(0.35)))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .onDrop(of: [.fileURL, .url, .pdf], isTargeted: $isTargeted) { providers in
-            loadPDFURLs(from: providers, completion: onDropPDFs)
+        .onDrop(of: acceptedTypes, isTargeted: $isTargeted) { providers in
+            loadFileURLs(
+                from: providers,
+                allowedExtensions: allowedExtensions,
+                fileRepresentationType: fileRepresentationType,
+                temporaryDirectoryName: temporaryDirectoryName,
+                temporaryExtension: temporaryExtension,
+                completion: onDropFiles
+            )
             return true
         }
     }

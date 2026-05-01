@@ -242,6 +242,14 @@ func choosePDFs() -> [URL] {
     return panel.runModal() == .OK ? panel.urls : []
 }
 
+func chooseBibFiles() -> [URL] {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [bibContentType()]
+    panel.allowsMultipleSelection = true
+    panel.canChooseDirectories = false
+    return panel.runModal() == .OK ? panel.urls : []
+}
+
 func chooseDirectory(defaultURL: URL? = nil) -> URL? {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
@@ -259,13 +267,43 @@ func chooseSavePDF(defaultName: String, defaultDirectory: URL? = nil) -> URL? {
     return panel.runModal() == .OK ? panel.url : nil
 }
 
+func chooseSaveBib(defaultName: String, defaultDirectory: URL? = nil) -> URL? {
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [bibContentType()]
+    panel.nameFieldStringValue = defaultName
+    panel.directoryURL = defaultDirectory
+    return panel.runModal() == .OK ? panel.url : nil
+}
+
+func bibContentType() -> UTType {
+    UTType(filenameExtension: "bib") ?? .plainText
+}
+
 func loadPDFURLs(from providers: [NSItemProvider], completion: @escaping ([URL]) -> Void) {
+    loadFileURLs(
+        from: providers,
+        allowedExtensions: ["pdf"],
+        fileRepresentationType: .pdf,
+        temporaryDirectoryName: "FigraDroppedPDFs",
+        temporaryExtension: "pdf",
+        completion: completion
+    )
+}
+
+func loadFileURLs(
+    from providers: [NSItemProvider],
+    allowedExtensions: Set<String>,
+    fileRepresentationType: UTType?,
+    temporaryDirectoryName: String,
+    temporaryExtension: String,
+    completion: @escaping ([URL]) -> Void
+) {
     var urls: [URL] = []
     let lock = NSLock()
     let group = DispatchGroup()
 
     func append(_ url: URL?) {
-        guard let url, url.isFileURL, url.pathExtension.lowercased() == "pdf" else { return }
+        guard let url, url.isFileURL, allowedExtensions.contains(url.pathExtension.lowercased()) else { return }
         lock.lock()
         if !urls.contains(url) {
             urls.append(url)
@@ -286,9 +324,9 @@ func loadPDFURLs(from providers: [NSItemProvider], completion: @escaping ([URL])
                 defer { group.leave() }
                 append(urlFromDroppedItem(item))
             }
-        } else if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
+        } else if let fileRepresentationType, provider.hasItemConformingToTypeIdentifier(fileRepresentationType.identifier) {
             group.enter()
-            provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.pdf.identifier) { url, inPlace, _ in
+            provider.loadInPlaceFileRepresentation(forTypeIdentifier: fileRepresentationType.identifier) { url, inPlace, _ in
                 defer { group.leave() }
                 guard let url else { return }
 
@@ -297,7 +335,7 @@ func loadPDFURLs(from providers: [NSItemProvider], completion: @escaping ([URL])
                     return
                 }
 
-                if let temporaryURL = copyDroppedPDFToTemporaryURL(url) {
+                if let temporaryURL = copyDroppedFileToTemporaryURL(url, directoryName: temporaryDirectoryName, fileExtension: temporaryExtension) {
                     append(temporaryURL)
                 } else {
                     append(url)
@@ -309,10 +347,14 @@ func loadPDFURLs(from providers: [NSItemProvider], completion: @escaping ([URL])
 }
 
 private func copyDroppedPDFToTemporaryURL(_ url: URL) -> URL? {
+    copyDroppedFileToTemporaryURL(url, directoryName: "FigraDroppedPDFs", fileExtension: "pdf")
+}
+
+private func copyDroppedFileToTemporaryURL(_ url: URL, directoryName: String, fileExtension pathExtension: String) -> URL? {
     let temporaryURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("FigraDroppedPDFs", isDirectory: true)
+        .appendingPathComponent(directoryName, isDirectory: true)
         .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension("pdf")
+        .appendingPathExtension(pathExtension)
     do {
         try FileManager.default.createDirectory(at: temporaryURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         if FileManager.default.fileExists(atPath: temporaryURL.path) {
@@ -323,6 +365,325 @@ private func copyDroppedPDFToTemporaryURL(_ url: URL) -> URL? {
     } catch {
         return nil
     }
+}
+
+@discardableResult
+func writeMergedBibFiles(_ urls: [URL], to outputURL: URL, duplicatePolicy: BibDuplicatePolicy) throws -> BibMergeSummary {
+    let result = try mergedBibOutput(from: urls, duplicatePolicy: duplicatePolicy)
+    try result.text.write(to: outputURL, atomically: true, encoding: .utf8)
+    return result.summary
+}
+
+func summarizeMergedBibFiles(_ urls: [URL], duplicatePolicy: BibDuplicatePolicy) throws -> BibMergeSummary {
+    try mergedBibOutput(from: urls, duplicatePolicy: duplicatePolicy).summary
+}
+
+func countBibReferences(in url: URL) -> Int {
+    guard let data = try? Data(contentsOf: url) else { return 0 }
+    guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return 0 }
+    return countBibReferences(in: text)
+}
+
+func countBibReferences(in text: String) -> Int {
+    parseBibBlocks(in: text).filter(\.isReference).count
+}
+
+private func mergedBibOutput(from urls: [URL], duplicatePolicy: BibDuplicatePolicy) throws -> (text: String, summary: BibMergeSummary) {
+    let chunks = try readBibChunks(from: urls)
+    guard !chunks.isEmpty else {
+        throw AppError("选中的 BibTeX 文件没有可合并内容。")
+    }
+
+    let merged = chunks.joined(separator: "\n\n")
+    let blocks = parseBibBlocks(in: merged)
+    guard blocks.contains(where: \.isReference) else {
+        throw AppError("选中的 BibTeX 文件没有可合并参考文献。")
+    }
+
+    var keptBlocks: [String] = []
+    var seenKeys: Set<String> = []
+    var seenTitles: Set<String> = []
+    var inputReferenceCount = 0
+    var outputReferenceCount = 0
+    var duplicateReferenceCount = 0
+    var duplicateKeyMatchCount = 0
+    var duplicateTitleMatchCount = 0
+
+    for block in blocks {
+        let cleaned = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { continue }
+
+        if !block.isReference {
+            keptBlocks.append(cleaned)
+            continue
+        }
+
+        inputReferenceCount += 1
+        let normalizedKey = block.citationKey?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedTitle = block.normalizedTitle
+        let keyMatches = normalizedKey.map { !$0.isEmpty && seenKeys.contains($0) } ?? false
+        let titleMatches = normalizedTitle.map { !$0.isEmpty && seenTitles.contains($0) } ?? false
+
+        if duplicatePolicy == .keyAndTitle, keyMatches || titleMatches {
+            duplicateReferenceCount += 1
+            if keyMatches { duplicateKeyMatchCount += 1 }
+            if titleMatches { duplicateTitleMatchCount += 1 }
+            continue
+        }
+
+        keptBlocks.append(cleaned)
+        outputReferenceCount += 1
+        if let normalizedKey, !normalizedKey.isEmpty {
+            seenKeys.insert(normalizedKey)
+        }
+        if let normalizedTitle, !normalizedTitle.isEmpty {
+            seenTitles.insert(normalizedTitle)
+        }
+    }
+
+    let summary = BibMergeSummary(
+        inputReferenceCount: inputReferenceCount,
+        outputReferenceCount: outputReferenceCount,
+        duplicateReferenceCount: duplicateReferenceCount,
+        duplicateKeyMatchCount: duplicateKeyMatchCount,
+        duplicateTitleMatchCount: duplicateTitleMatchCount
+    )
+    return (keptBlocks.joined(separator: "\n\n") + "\n", summary)
+}
+
+private func readBibChunks(from urls: [URL]) throws -> [String] {
+    var chunks: [String] = []
+    for url in urls {
+        let data = try Data(contentsOf: url)
+        guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+            throw AppError("无法读取 BibTeX 文本：\(url.lastPathComponent)")
+        }
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleaned.isEmpty {
+            chunks.append(cleaned)
+        }
+    }
+    return chunks
+}
+
+private struct BibBlock {
+    let text: String
+    let type: String?
+    let citationKey: String?
+    let normalizedTitle: String?
+
+    var isReference: Bool {
+        guard let type else { return false }
+        return !["comment", "preamble", "string"].contains(type.lowercased())
+    }
+}
+
+private func parseBibBlocks(in text: String) -> [BibBlock] {
+    var blocks: [BibBlock] = []
+    var cursor = text.startIndex
+
+    while cursor < text.endIndex {
+        guard let atIndex = text[cursor...].firstIndex(of: "@") else {
+            appendBibTextBlock(String(text[cursor...]), to: &blocks)
+            break
+        }
+
+        if cursor < atIndex {
+            appendBibTextBlock(String(text[cursor..<atIndex]), to: &blocks)
+        }
+
+        guard let entry = parseBibEntry(in: text, at: atIndex) else {
+            appendBibTextBlock(String(text[atIndex...atIndex]), to: &blocks)
+            cursor = text.index(after: atIndex)
+            continue
+        }
+
+        blocks.append(entry.block)
+        cursor = entry.endIndex
+    }
+
+    return blocks
+}
+
+private func appendBibTextBlock(_ text: String, to blocks: inout [BibBlock]) {
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    blocks.append(BibBlock(text: text, type: nil, citationKey: nil, normalizedTitle: nil))
+}
+
+private func parseBibEntry(in text: String, at atIndex: String.Index) -> (block: BibBlock, endIndex: String.Index)? {
+    var cursor = text.index(after: atIndex)
+    skipWhitespace(in: text, cursor: &cursor)
+    let typeStart = cursor
+    while cursor < text.endIndex, isBibIdentifierCharacter(text[cursor]) {
+        cursor = text.index(after: cursor)
+    }
+    guard typeStart < cursor else { return nil }
+    let type = String(text[typeStart..<cursor])
+    skipWhitespace(in: text, cursor: &cursor)
+    guard cursor < text.endIndex, text[cursor] == "{" || text[cursor] == "(" else { return nil }
+
+    let openIndex = cursor
+    let openCharacter = text[cursor]
+    let closeCharacter: Character = openCharacter == "{" ? "}" : ")"
+    var depth = 0
+
+    while cursor < text.endIndex {
+        let character = text[cursor]
+        if character == openCharacter {
+            depth += 1
+        } else if character == closeCharacter {
+            depth -= 1
+            if depth == 0 {
+                let endIndex = text.index(after: cursor)
+                let entryText = String(text[atIndex..<endIndex])
+                let lowercasedType = type.lowercased()
+                let citationKey = ["comment", "preamble", "string"].contains(lowercasedType) ? nil : extractBibCitationKey(from: text, openIndex: openIndex, closeIndex: cursor)
+                let title = extractBibField("title", from: text, openIndex: openIndex, closeIndex: cursor)
+                let block = BibBlock(text: entryText, type: type, citationKey: citationKey, normalizedTitle: normalizeBibTitle(title))
+                return (block, endIndex)
+            }
+        }
+        cursor = text.index(after: cursor)
+    }
+
+    let entryText = String(text[atIndex..<text.endIndex])
+    let block = BibBlock(text: entryText, type: type, citationKey: nil, normalizedTitle: nil)
+    return (block, text.endIndex)
+}
+
+private func extractBibCitationKey(from text: String, openIndex: String.Index, closeIndex: String.Index) -> String? {
+    var cursor = text.index(after: openIndex)
+    skipWhitespace(in: text, cursor: &cursor)
+    let keyStart = cursor
+    while cursor < closeIndex, text[cursor] != "," {
+        cursor = text.index(after: cursor)
+    }
+    guard cursor < closeIndex else { return nil }
+    return String(text[keyStart..<cursor]).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func extractBibField(_ fieldName: String, from text: String, openIndex: String.Index, closeIndex: String.Index) -> String? {
+    var cursor = text.index(after: openIndex)
+    while cursor < closeIndex, text[cursor] != "," {
+        cursor = text.index(after: cursor)
+    }
+    guard cursor < closeIndex else { return nil }
+    cursor = text.index(after: cursor)
+
+    while cursor < closeIndex {
+        skipBibFieldSeparators(in: text, cursor: &cursor, endIndex: closeIndex)
+        let nameStart = cursor
+        while cursor < closeIndex, isBibIdentifierCharacter(text[cursor]) {
+            cursor = text.index(after: cursor)
+        }
+        guard nameStart < cursor else {
+            cursor = text.index(after: cursor)
+            continue
+        }
+        let name = String(text[nameStart..<cursor]).lowercased()
+        skipWhitespace(in: text, cursor: &cursor)
+        guard cursor < closeIndex, text[cursor] == "=" else { continue }
+        cursor = text.index(after: cursor)
+        skipWhitespace(in: text, cursor: &cursor)
+        let value = parseBibFieldValue(in: text, cursor: &cursor, endIndex: closeIndex)
+        if name == fieldName.lowercased() {
+            return value
+        }
+    }
+
+    return nil
+}
+
+private func parseBibFieldValue(in text: String, cursor: inout String.Index, endIndex: String.Index) -> String {
+    guard cursor < endIndex else { return "" }
+    if text[cursor] == "{" {
+        return parseBalancedBibValue(in: text, cursor: &cursor, endIndex: endIndex, open: "{", close: "}")
+    }
+    if text[cursor] == "\"" {
+        return parseQuotedBibValue(in: text, cursor: &cursor, endIndex: endIndex)
+    }
+
+    let valueStart = cursor
+    while cursor < endIndex, text[cursor] != "," {
+        cursor = text.index(after: cursor)
+    }
+    return String(text[valueStart..<cursor]).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func parseBalancedBibValue(in text: String, cursor: inout String.Index, endIndex: String.Index, open: Character, close: Character) -> String {
+    let valueStart = text.index(after: cursor)
+    var depth = 0
+    while cursor < endIndex {
+        let character = text[cursor]
+        if character == open {
+            depth += 1
+        } else if character == close {
+            depth -= 1
+            if depth == 0 {
+                let value = String(text[valueStart..<cursor])
+                cursor = text.index(after: cursor)
+                return value
+            }
+        }
+        cursor = text.index(after: cursor)
+    }
+    return String(text[valueStart..<endIndex])
+}
+
+private func parseQuotedBibValue(in text: String, cursor: inout String.Index, endIndex: String.Index) -> String {
+    cursor = text.index(after: cursor)
+    let valueStart = cursor
+    var isEscaped = false
+    while cursor < endIndex {
+        let character = text[cursor]
+        if character == "\"" && !isEscaped {
+            let value = String(text[valueStart..<cursor])
+            cursor = text.index(after: cursor)
+            return value
+        }
+        isEscaped = character == "\\" && !isEscaped
+        if character != "\\" {
+            isEscaped = false
+        }
+        cursor = text.index(after: cursor)
+    }
+    return String(text[valueStart..<endIndex])
+}
+
+private func normalizeBibTitle(_ title: String?) -> String? {
+    guard let title else { return nil }
+    let folded = title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    var scalars: [UnicodeScalar] = []
+    var previousWasSpace = true
+
+    for scalar in folded.unicodeScalars {
+        if CharacterSet.alphanumerics.contains(scalar) {
+            scalars.append(scalar)
+            previousWasSpace = false
+        } else if !previousWasSpace {
+            scalars.append(" ")
+            previousWasSpace = true
+        }
+    }
+
+    let normalized = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespacesAndNewlines)
+    return normalized.count >= 6 ? normalized : nil
+}
+
+private func skipWhitespace(in text: String, cursor: inout String.Index) {
+    while cursor < text.endIndex, text[cursor].isWhitespace {
+        cursor = text.index(after: cursor)
+    }
+}
+
+private func skipBibFieldSeparators(in text: String, cursor: inout String.Index, endIndex: String.Index) {
+    while cursor < endIndex, text[cursor].isWhitespace || text[cursor] == "," {
+        cursor = text.index(after: cursor)
+    }
+}
+
+private func isBibIdentifierCharacter(_ character: Character) -> Bool {
+    character.isLetter || character.isNumber || character == "_" || character == "-"
 }
 
 private func urlFromDroppedItem(_ item: Any?) -> URL? {

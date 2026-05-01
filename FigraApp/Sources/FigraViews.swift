@@ -59,6 +59,8 @@ private struct ToolDetailView: View {
             PageOrganizeView(model: model)
         case .merge:
             MergePDFView(model: model)
+        case .bibMerge:
+            BibMergeView(model: model)
         case .split:
             PageExportView(model: model, mode: .split)
         case .compress:
